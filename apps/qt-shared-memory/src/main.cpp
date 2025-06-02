@@ -6,8 +6,6 @@
 #include <QStandardPaths>
 #include <QDir>
 
-#define MEMORY_MAPPED_FILE "qt_shared_memory"
-
 QFile file;
 uchar *data = nullptr;
 
@@ -39,6 +37,17 @@ void signalHandler(int signum)
 int main(int argc, char *argv[])
 {
     QCoreApplication app(argc, argv);
+
+    QStringList args = app.arguments();
+
+    if (args.size() < 2)
+    {
+        qDebug().noquote() << QString("Error: Missing shared memory name argument.\n").arg(args[0]);
+        qDebug().noquote() << QString("Usage: %1 <memory_mapped_file_name>").arg(args[0]);
+        exit(EXIT_FAILURE);
+    }
+
+    const QString MEMORY_MAPPED_FILE = args.at(1);
 
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
