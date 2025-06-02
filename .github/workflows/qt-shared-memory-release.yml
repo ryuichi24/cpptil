@@ -1,0 +1,246 @@
+name: Build and Release Qt Application
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags like v1.0.0
+  workflow_dispatch:  # Allow manual triggering
+
+env:
+  QT_VERSION: '6.6.1'
+  CMAKE_VERSION: '3.31.2'
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          # macOS ARM64 (Apple Silicon)
+          - os: macos-14
+            name: macos-arm64
+            qt_arch: clang_64
+            cmake_preset: macos-arm64
+            artifact_name: qt-shared-memory-macos-arm64
+            executable_extension: ""
+            
+          # macOS Intel
+          - os: macos-13
+            name: macos-intel
+            qt_arch: clang_64
+            cmake_preset: macos-intel
+            artifact_name: qt-shared-memory-macos-intel
+            executable_extension: ""
+            
+          # Windows
+          - os: windows-latest
+            name: windows
+            qt_arch: win64_msvc2019_64
+            cmake_preset: windows
+            artifact_name: qt-shared-memory-windows
+            executable_extension: ".exe"
+            
+          # Linux
+          - os: ubuntu-latest
+            name: linux
+            qt_arch: gcc_64
+            cmake_preset: linux
+            artifact_name: qt-shared-memory-linux
+            executable_extension: ""
+
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Qt (Windows)
+      if: matrix.os == 'windows-latest'
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: ${{ env.QT_VERSION }}
+        arch: ${{ matrix.qt_arch }}
+        cache: true
+
+    - name: Install Qt (macOS)
+      if: startsWith(matrix.os, 'macos')
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: ${{ env.QT_VERSION }}
+        arch: ${{ matrix.qt_arch }}
+        cache: true
+
+    - name: Install Qt (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y qt6-base-dev qt6-base-dev-tools libqt6network6 build-essential
+
+    - name: Install CMake
+      uses: jwlawson/actions-setup-cmake@v1.14
+      with:
+        cmake-version: ${{ env.CMAKE_VERSION }}
+
+    - name: Configure CMake
+      working-directory: apps/qt-shared-memory
+      run: |
+        cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+    - name: Build
+      working-directory: apps/qt-shared-memory
+      run: |
+        cmake --build build --config Release
+
+    - name: Create portable package (Windows)
+      if: matrix.os == 'windows-latest'
+      working-directory: apps/qt-shared-memory
+      run: |
+        mkdir package
+        copy "build\Release\qt-shared-memory.exe" "package\"
+        windeployqt.exe --release --no-translations --no-system-d3d-compiler package\qt-shared-memory.exe
+        
+    - name: Create portable package (macOS)
+      if: startsWith(matrix.os, 'macos')
+      working-directory: apps/qt-shared-memory
+      run: |
+        mkdir -p package
+        cp build/qt-shared-memory package/
+        # Create app bundle structure
+        mkdir -p package/qt-shared-memory.app/Contents/MacOS
+        mkdir -p package/qt-shared-memory.app/Contents/Resources
+        mv package/qt-shared-memory package/qt-shared-memory.app/Contents/MacOS/
+        # Create Info.plist
+        cat > package/qt-shared-memory.app/Contents/Info.plist << EOF
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>CFBundleExecutable</key>
+            <string>qt-shared-memory</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.example.qt-shared-memory</string>
+            <key>CFBundleName</key>
+            <string>Qt Shared Memory</string>
+            <key>CFBundleVersion</key>
+            <string>1.0.0</string>
+            <key>CFBundleShortVersionString</key>
+            <string>1.0.0</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+        </dict>
+        </plist>
+        EOF
+        # Deploy Qt libraries
+        macdeployqt package/qt-shared-memory.app
+
+    - name: Create portable package (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      working-directory: apps/qt-shared-memory
+      run: |
+        mkdir -p package
+        cp build/qt-shared-memory package/
+        # Make executable
+        chmod +x package/qt-shared-memory
+
+    - name: Create archive (Windows)
+      if: matrix.os == 'windows-latest'
+      working-directory: apps/qt-shared-memory
+      run: |
+        7z a "${{ matrix.artifact_name }}.zip" ./package/*
+
+    - name: Create archive (macOS)
+      if: startsWith(matrix.os, 'macos')
+      working-directory: apps/qt-shared-memory
+      run: |
+        tar -czf "${{ matrix.artifact_name }}.tar.gz" -C package .
+
+    - name: Create archive (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      working-directory: apps/qt-shared-memory
+      run: |
+        tar -czf "${{ matrix.artifact_name }}.tar.gz" -C package .
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.artifact_name }}
+        path: |
+          apps/qt-shared-memory/${{ matrix.artifact_name }}.zip
+          apps/qt-shared-memory/${{ matrix.artifact_name }}.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Display structure of downloaded files
+      run: ls -la artifacts/
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref_name }}
+        release_name: Release ${{ github.ref_name }}
+        body: |
+          ## Changes in this Release
+          - Built for Windows, macOS (Intel & ARM64), and Linux
+          - Includes all necessary Qt dependencies
+          
+          ## Download Instructions
+          - **Windows**: Download `qt-shared-memory-windows.zip`, extract and run `qt-shared-memory.exe`
+          - **macOS (Apple Silicon)**: Download `qt-shared-memory-macos-arm64.tar.gz`, extract and run the app bundle
+          - **macOS (Intel)**: Download `qt-shared-memory-macos-intel.tar.gz`, extract and run the app bundle
+          - **Linux**: Download `qt-shared-memory-linux.tar.gz`, extract and run `qt-shared-memory`
+        draft: false
+        prerelease: false
+
+    - name: Upload Windows Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: artifacts/qt-shared-memory-windows/qt-shared-memory-windows.zip
+        asset_name: qt-shared-memory-windows.zip
+        asset_content_type: application/zip
+
+    - name: Upload macOS ARM64 Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: artifacts/qt-shared-memory-macos-arm64/qt-shared-memory-macos-arm64.tar.gz
+        asset_name: qt-shared-memory-macos-arm64.tar.gz
+        asset_content_type: application/gzip
+
+    - name: Upload macOS Intel Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: artifacts/qt-shared-memory-macos-intel/qt-shared-memory-macos-intel.tar.gz
+        asset_name: qt-shared-memory-macos-intel.tar.gz
+        asset_content_type: application/gzip
+
+    - name: Upload Linux Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: artifacts/qt-shared-memory-linux/qt-shared-memory-linux.tar.gz
+        asset_name: qt-shared-memory-linux.tar.gz
+        asset_content_type: application/gzip
