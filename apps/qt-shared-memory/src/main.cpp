@@ -3,6 +3,7 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QFile>
+#include <QStandardPaths>
 #include <QDir>
 
 #define MEMORY_MAPPED_FILE "qt_shared_memory"
@@ -35,29 +36,6 @@ void signalHandler(int signum)
     exit(signum);
 }
 
-QString getConfigDirPath(QString config_dir_name)
-{
-    QString homeDir = QDir::homePath();
-    QString hiddenDirName = config_dir_name;
-    QString hiddenDirPath = QDir(homeDir).filePath(hiddenDirName);
-
-    QDir dir;
-    if (!dir.exists(hiddenDirPath))
-    {
-        if (!dir.mkpath(hiddenDirPath))
-        {
-            qCritical() << "Failed to create hidden directory:" << hiddenDirPath;
-            return QString();
-        }
-#ifdef Q_OS_WIN
-        // Set hidden attribute on Windows
-        SetFileAttributesW(reinterpret_cast<LPCWSTR>(hiddenDirPath.utf16()), FILE_ATTRIBUTE_HIDDEN);
-#endif
-    }
-
-    return hiddenDirPath;
-}
-
 int main(int argc, char *argv[])
 {
     QCoreApplication app(argc, argv);
@@ -65,12 +43,9 @@ int main(int argc, char *argv[])
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
 
-    QString homeDir = QDir::homePath();
-    QString hiddenDirName = ".cpptil";
-    QString hiddenDirPath = getConfigDirPath(hiddenDirName);
-    // Get the current working directory
-    QString currentDir = QDir::currentPath();
-    QString fileName = hiddenDirPath + QDir::separator() + MEMORY_MAPPED_FILE;
+    QString tempPath = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    QString fileName = tempPath + QDir::separator() + MEMORY_MAPPED_FILE;
+    qDebug() << "Using shared memory file:" << fileName.toStdString();
     file.setFileName(fileName);
 
     bool opened = file.open(QIODevice::ReadWrite);
