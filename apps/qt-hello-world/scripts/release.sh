@@ -6,7 +6,7 @@ if [ -d "build" ]; then
     rm -rf build
 fi
 
-PROJECT_NAME="tcpserver"
+PROJECT_NAME="qt-hello-world"
 
 echo "\nBuilding $PROJECT_NAME...\n"
 
