@@ -70,7 +70,8 @@ int main(int argc, char *argv[])
 
     QString tempPath = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
     QString fileName = tempPath + QDir::separator() + MEMORY_MAPPED_FILE;
-    qDebug() << "Using shared memory file:" << fileName.toStdString();
+    qDebug() << "Using shared memory file:" << fileName;
+
     file.setFileName(fileName);
 
     bool opened = file.open(QIODevice::ReadWrite);
