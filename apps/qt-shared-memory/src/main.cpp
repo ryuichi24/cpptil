@@ -5,6 +5,7 @@
 #include <QFile>
 #include <QStandardPaths>
 #include <QDir>
+#include <QTcpServer>
 
 QFile file;
 uchar *data = nullptr;
@@ -34,6 +35,21 @@ void signalHandler(int signum)
     exit(signum);
 }
 
+int findFreePort()
+{
+    QTcpServer server;
+    bool bound = server.listen(QHostAddress::Any, 0);
+    if (!bound)
+    {
+        qCritical() << "Failed to bind to a free port:" << server.errorString();
+        exit(EXIT_FAILURE);
+    }
+
+    int freePort = server.serverPort();
+    server.close();
+    return freePort;
+}
+
 int main(int argc, char *argv[])
 {
     QCoreApplication app(argc, argv);
@@ -61,7 +77,7 @@ int main(int argc, char *argv[])
     if (!opened)
     {
         qCritical() << "Failed to open file:" << file.errorString();
-        return EXIT_FAILURE;
+        exit(EXIT_FAILURE);
     };
 
     // Ensure the file is 4 bytes in size
@@ -75,11 +91,11 @@ int main(int argc, char *argv[])
     if (!data)
     {
         qCritical() << "Failed to map file into memory.";
-        return EXIT_FAILURE;
+        exit(EXIT_FAILURE);
     }
 
     // Write the port number
-    quint32 port = 51111;
+    quint32 port = findFreePort();
     memcpy(data, &port, sizeof(quint32));
 
     qDebug() << "Port number written to shared memory:" << port;
