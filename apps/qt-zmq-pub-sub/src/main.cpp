@@ -33,4 +33,19 @@ int main(int argc, char *argv[])
     {
         qDebug() << "No data read from shared memory.";
     }
+
+    std::map<int, std::string> device_map;
+    device_map.insert({1, "Device A"});
+
+    auto it = device_map.find(1);
+    auto it2 = device_map.end();
+
+    if (it != it2)
+    {
+        qDebug() << "Found device:" << QString::fromStdString(it->second);
+    }
+    else
+    {
+        qDebug() << "Device not found.";
+    }
 }

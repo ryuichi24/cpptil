@@ -34,6 +34,7 @@ void MemoryMapper::write(const QByteArray &data)
     }
 
     memcpy(mem.address, data.constData(), data.size());
+     qDebug() << "Successfully wrote" << data.size() << "bytes to memory-mapped file:" << m_memPath;
 
     unmapFile(&mem);
 }
@@ -81,12 +82,25 @@ MemoryMapper::MemoryMap MemoryMapper::memMapFileForWrite() const
     MemoryMap mem;
     mem.file = std::make_unique<QFile>();
     mem.file->setFileName(m_memPath);
-    mem.file->open(QIODevice::ReadWrite);
+
+    if (!mem.file->open(QIODevice::ReadWrite))
+    {
+        qWarning() << "Failed to open memory-mapped file for read/write:" << m_memPath;
+        return {};
+    }
+
     if (!mem.file->resize(m_size))
     {
         qWarning() << "Failed to resize memory-mapped file:" << m_memPath;
     }
+
     mem.address = mem.file->map(0, m_size);
+
+    if (!mem.address)
+    {
+        qWarning() << "Failed to map file into memory:" << m_memPath;
+    }
+
     return mem;
 }
 
@@ -95,16 +109,29 @@ MemoryMapper::MemoryMap MemoryMapper::memMapFileForRead() const
     MemoryMap mem;
     mem.file = std::make_unique<QFile>();
     mem.file->setFileName(m_memPath);
-    mem.file->open(QIODevice::ReadWrite);
+    if (!mem.file->open(QIODevice::ReadWrite))
+    {
+        qWarning() << "Failed to open memory-mapped file for read/write:" << m_memPath;
+        return {};
+    }
+
     if (!mem.file->resize(m_size))
     {
         qWarning() << "Failed to resize memory-mapped file:" << m_memPath;
     }
+
     mem.address = mem.file->map(0, m_size);
+
+    if (!mem.address)
+    {
+        qWarning() << "Failed to map file into memory:" << m_memPath;
+    }
+
     return mem;
 }
 
 void MemoryMapper::unmapFile(MemoryMap *mem) const
 {
     mem->file->unmap(mem->address);
+    mem->file->close();
 }
