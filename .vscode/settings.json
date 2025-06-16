@@ -62,6 +62,11 @@
         "vector": "cpp",
         "algorithm": "cpp",
         "qcoreapplication": "cpp",
-        "qstandardpaths": "cpp"
+        "qstandardpaths": "cpp",
+        "csignal": "cpp",
+        "qtcpserver": "cpp",
+        "qdir": "cpp",
+        "qfile": "cpp",
+        "qdebug": "cpp"
     }
 }
